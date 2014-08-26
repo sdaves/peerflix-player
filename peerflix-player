@@ -1,0 +1,268 @@
+#!/usr/bin/python
+
+import copy
+import json
+import os
+import time
+import threading
+import urllib2
+import BeautifulSoup
+
+
+class PeerflixPlayer:
+
+    def run(self, cmd, mode='r'):
+        return os.popen2(cmd, mode)[1].readlines()
+
+    def dump(self, val):
+        print(json.dumps(val))
+
+    def clean_up(self):
+        self.run('rm -rfv /tmp/torrent-stream/')
+
+    def get_url(self):
+        return ''.join(self.run('xclip -o'))
+
+    def show_downloading_info(self):
+        progress = os.popen2([
+            'zenity',
+            '--progress',
+            '--text=Downloading ...',
+            '--title=Peerflix Player',
+            '--pulsate',
+            '--auto-close'
+        ], 'w')[0]
+
+        self.activate_progress(progress)
+
+        return progress
+
+    def check_if_valid_url(self, clip):
+        if not clip.strip():
+            self.run([
+                'zenity',
+                '--title=Peerflix Player',
+                "--text=Please copy a url and restart this program.",
+                '--error',
+            ])
+            exit()
+
+    def finish_progress(self, progress):
+        progress.writelines(['100'])
+        progress.close()
+
+    def activate_progress(self, progress):
+        progress.writelines(['10'])
+        progress.flush()
+
+    def get_choices(self, clip):
+        items = self.run(['peerflix', clip, '-l'])
+
+        choices = []
+
+        for item in items:
+            val = item.split("[35m")[1].split('\u001b')[0]
+            choices.append(val)
+
+        return choices
+
+    def is_valid_file(self, item):
+        item = item.lower()
+        bad_strings = [
+            'sample',
+            '.txt',
+            '.html',
+            '.nfo',
+            '.pdf',
+            '.sfv',
+            '.png',
+            '.jpg',
+        ]
+
+        for val in bad_strings:
+            if val in item:
+                return False
+
+        return True
+
+    def clean_choices(self, choices):
+        out = []
+        for item in choices:
+            if self.is_valid_file(item):
+                out.append(item)
+        return out
+
+    def get_selected(self, choices):
+        choices.sort()
+
+        cmd = []
+        cmd.extend([
+            'zenity',
+            '--title=Peerflix Player',
+            '--checklist',
+            '--height=500',
+            '--width=500',
+            '--list',
+            '--column=Play',
+            '--column=Name',
+        ])
+        is_first = 'TRUE'
+        for item in choices:
+            cmd.extend([is_first, item])
+            is_first = 'FALSE'
+
+        selected = self.run(cmd)
+
+        if len(selected):
+            selected.pop()
+
+        return selected
+
+    def run_movie(self, clip, choices, choice):
+        val = choice
+        if val[0] is '|':
+            val = val[1:]
+
+        idx = choices.index(val)
+
+        cmd = "peerflix \"{clip}\" -v -i {id} -r".format(
+            id=str(idx),
+            clip=clip,
+        )
+
+        os.system(cmd)
+
+    def play_item(self, clip, choices, choice):
+        args = (clip, choices, choice)
+        thr = threading.Thread(target=self.run_movie, args=args)
+
+        #start file in background thread
+        thr.start()
+
+        #wait for vlc to open
+        time.sleep(2)
+
+        #show loading dialog
+        progress = os.popen2([
+            'zenity',
+            '--title=Peerflix Player',
+            '--progress',
+            '--text=Processing file ...',
+            '--pulsate',
+            '--auto-close',
+        ], 'w')[0]
+        self.activate_progress(progress)
+
+        #wait for file to end
+        thr.join()
+
+        self.finish_progress(progress)
+
+    def get_action(self):
+        action = self.run(' '.join([
+            'zenity',
+            '--entry',
+            '--title="Peerflix Player"',
+            '--text="Sit back, and relax."',
+            '--width=300',
+            '--entry-text="Enter Search Term"',
+            "'Play clipboard url'",
+            "'Quit'",
+        ]))
+
+        if len(action):
+            return action[0]
+
+    def do_search(self, text):
+        progress = self.show_downloading_info()
+
+        url = "http://bitsnoop.com/search/all/{0}/c/d/1/?fmt=rss"
+        opener = urllib2.build_opener()
+        opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+        page = opener.open(url.format(urllib2.quote(text))).read()
+        rss = BeautifulSoup.BeautifulSoup(page)
+
+        self.finish_progress(progress)
+
+        items = []
+        urls = []
+
+        is_first = 'TRUE'
+        idx = 1
+        for item in rss.findAll('item'):
+            items.append(is_first)
+            is_first = 'FALSE'
+            items.append(str(idx))
+            idx += 1
+            items.append(item.find('numseeders').text)
+            val = str(int(item.find('size').text)/1024.0/1024.0/1024.0)
+            items.append(val[0:val.index('.')+2])
+            items.append(item.find('title').text)
+            val = item.find('magneturi').text
+            items.append(val)
+            urls.append(val)
+
+        cmd = [
+            'zenity',
+            '--list',
+            '--radiolist',
+            '--title=Peerflix Player',
+            '--text=Which one would you like?',
+            '--width=700',
+            '--height=500',
+            '--column=Item',
+            '--column=ID',
+            '--column=Peers',
+            '--column=GB',
+            '--column=Name',
+            '--column=URL',
+        ]
+
+        cmd.extend(items)
+
+        selected = self.run(cmd)
+
+        selected = urls[int(selected[0]) - 1]
+        return selected
+
+    def main(self):
+        self.clean_up()
+        clip = ''
+        action = self.get_action()
+
+        if not action:
+            return
+
+        if 'Play clipboard url' is action:
+            clip = self.get_url()
+        elif 'Quit' is action:
+            return
+        else:
+            clip = self.do_search(action)
+
+        self.check_if_valid_url(clip)
+        progress = self.show_downloading_info()
+        start_choices = self.get_choices(clip)
+        choices = copy.copy(start_choices)
+        self.finish_progress(progress)
+        choices = self.clean_choices(choices)
+
+        if len(choices) is 1:
+            selected = choices
+        else:
+            selected = self.get_selected(choices)
+
+        if not len(selected):
+            return
+
+        for choice in selected:
+            self.play_item(clip, start_choices, choice)
+
+
+if __name__ == '__main__':
+    player = PeerflixPlayer()
+    try:
+        player.main()
+    except KeyboardInterrupt, e:
+        player.clean_up()
+        raise(e)
