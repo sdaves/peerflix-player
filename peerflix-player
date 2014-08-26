@@ -261,8 +261,10 @@ class PeerflixPlayer:
 
 if __name__ == '__main__':
     player = PeerflixPlayer()
+
     try:
         player.main()
     except KeyboardInterrupt, e:
-        player.clean_up()
-        raise(e)
+        pass
+
+    player.clean_up()
