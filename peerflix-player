@@ -140,7 +140,7 @@ class PeerflixPlayer:
         thr.start()
 
         #wait for vlc to open
-        time.sleep(2)
+        time.sleep(5)
 
         #show loading dialog
         progress = os.popen2([
