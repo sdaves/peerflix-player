@@ -139,7 +139,8 @@ class PeerflixPlayer:
             '--text=Downloading ...',
             '--title=Peerflix Player',
             '--pulsate',
-            '--auto-close'
+            '--auto-close',
+            '--auto-kill',
         ], 'w')[0]
 
         self.activate_progress(progress)
@@ -274,6 +275,7 @@ class PeerflixPlayer:
             '--text=Processing file ...',
             '--pulsate',
             '--auto-close',
+            '--auto-kill',
         ], 'w')[0]
         self.activate_progress(progress)
 
