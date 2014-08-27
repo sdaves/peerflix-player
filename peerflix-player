@@ -9,7 +9,8 @@ import BeautifulSoup
 
 class WebSearcher:
 
-    def __init__(self):
+    def __init__(self, player):
+        self.player = player
         self.providers = [
             self.btsn,
             self.tpb,
@@ -21,6 +22,10 @@ class WebSearcher:
         soup = self.get_url_soup(url, text)
 
         root = soup.find(id='searchResult')
+
+        if not root:
+            return results
+
         for item in root.findAll('tr'):
             the_class = item.get('class')
             if the_class == 'header':
@@ -86,7 +91,7 @@ class WebSearcher:
             error = True
 
         if error:
-            self.show_error('Remote address unavailable.')
+            self.player.show_error('Remote address unavailable.')
 
         soup = BeautifulSoup.BeautifulSoup(page)
 
@@ -322,7 +327,7 @@ class PeerflixPlayer:
             return
         else:
             progress = self.show_downloading_info()
-            searcher = WebSearcher()
+            searcher = WebSearcher(self)
             found_items = searcher.search_all(action)
             self.finish_progress(progress)
             clip = self.pick_found_items(found_items)
