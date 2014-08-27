@@ -237,7 +237,7 @@ class PeerflixPlayer:
 
         idx = choices.index(val)
 
-        cmd = "peerflix \"{clip}\" -v -i {id} -r".format(
+        cmd = "peerflix \"{clip}\" -v -i {id} -r -c 30".format(
             id=str(idx),
             clip=clip,
         )
