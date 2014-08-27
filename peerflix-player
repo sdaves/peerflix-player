@@ -321,7 +321,7 @@ class PeerflixPlayer:
         if not action:
             return
 
-        if 'Play clipboard url' is action:
+        if 'Play clipboard url' in action:
             clip = self.get_url()
         elif 'Quit' is action:
             return
