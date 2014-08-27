@@ -21,6 +21,12 @@ class WebSearcher:
         url = "https://the"+"pi"+"rateb"+"ay.se/search/{0}/0/7/100,200"
         soup = self.get_url_soup(url, text)
 
+        if not soup:
+            self.player.show_error("{0} unavailable.".format(
+              url[url.index('//')+2:url.index('.')+3]
+            ))
+            return results
+
         root = soup.find(id='searchResult')
 
         if not root:
@@ -62,6 +68,12 @@ class WebSearcher:
         url = "http://bi"+"tsno"+"op.com/search/all/{0}/s/d/1/?fmt=rss"
         soup = self.get_url_soup(url, text)
 
+        if not soup:
+            self.player.show_error("{0} unavailable.".format(
+              url[url.index('//')+2:url.index('.')+4]
+            ))
+            return results
+
         for item in soup.findAll('item'):
             mag = item.find('infohash').text
 
@@ -91,9 +103,9 @@ class WebSearcher:
             error = True
 
         if error:
-            self.player.show_error('Remote address unavailable.')
-
-        soup = BeautifulSoup.BeautifulSoup(page)
+            soup = None
+        else:
+            soup = BeautifulSoup.BeautifulSoup(page)
 
         return soup
 
