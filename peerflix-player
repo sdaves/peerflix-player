@@ -18,7 +18,7 @@ class WebSearcher:
 
     def tpb(self, text):
         results = dict()
-        url = "https://thepiratebay.se/search/{0}/0/7/100,200"
+        url = "https://the"+"pi"+"rateb"+"ay.se/search/{0}/0/7/100,200"
         soup = self.get_url_soup(url, text)
 
         root = soup.find(id='searchResult')
@@ -30,12 +30,12 @@ class WebSearcher:
             the_class = item.get('class')
             if the_class == 'header':
                 continue
-            mag = str(
+            full_mag = str(
                 item.find(
                     title='Download this torrent using magnet',
                 ).get('href')
             )
-            mag = mag.split('btih:')[1].split('&')[0]
+            mag = full_mag.split('btih:')[1].split('&')[0]
 
             if mag in results:
                 continue
@@ -52,14 +52,14 @@ class WebSearcher:
                 seeders=int(item.find(align='right').text),
                 size=size,
                 name=item.find('a', {'class': 'detLink'}).text,
-                mag=mag,
+                full_mag=full_mag,
             )
 
         return results
 
     def btsn(self, text):
         results = dict()
-        url = "http://bitsnoop.com/search/all/{0}/s/d/1/?fmt=rss"
+        url = "http://bi"+"tsno"+"op.com/search/all/{0}/s/d/1/?fmt=rss"
         soup = self.get_url_soup(url, text)
 
         for item in soup.findAll('item'):
@@ -75,7 +75,7 @@ class WebSearcher:
                 seeders=int(item.find('numseeders').text),
                 size=size,
                 name=item.find('title').text,
-                mag=mag,
+                full_mag=item.find('magneturi').text,
             )
 
         return results
@@ -302,16 +302,15 @@ class PeerflixPlayer:
             is_first = 'FALSE'
             idx += 1
 
-        selected = self.run(cmd)[0]
+        selected = self.run(cmd)
 
         if not selected:
             return
 
-        base = "magnet:?xt=urn:btih:{0}"
+        (seeders, mag) = sorted_items[int(selected[0]) - 1]
 
-        (seeders, mag) = sorted_items[int(selected) - 1]
-
-        return base.format(mag)
+        #get full magnet
+        return items[mag]['full_mag']
 
     def main(self):
         self.clean_up()
@@ -330,11 +329,16 @@ class PeerflixPlayer:
             searcher = WebSearcher(self)
             found_items = searcher.search_all(action)
             self.finish_progress(progress)
+            if not len(found_items):
+                self.show_error('Sorry, but nothing was found.')
+                return self.main()
             clip = self.pick_found_items(found_items)
+            if not clip:
+                return self.main()
 
         if not self.is_valid_url(clip):
             self.show_not_valid_url()
-            return
+            return self.main()
 
         progress = self.show_downloading_info()
         start_choices = self.get_choices(clip)
@@ -348,7 +352,7 @@ class PeerflixPlayer:
             selected = self.get_selected(choices)
 
         if not len(selected):
-            return
+            return self.main()
 
         progress = self.show_processing()
 
