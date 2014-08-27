@@ -219,10 +219,9 @@ class PeerflixPlayer:
             '--column=Play',
             '--column=Name',
         ])
-        is_first = 'TRUE'
         for item in choices:
-            cmd.extend([is_first, item])
-            is_first = 'FALSE'
+            cmd.extend(['FALSE', item])
+
 
         selected = self.run(cmd)
 
