@@ -3,10 +3,102 @@
 import copy
 import json
 import os
-import time
-import threading
 import urllib2
 import BeautifulSoup
+
+
+class WebSearcher:
+
+    def __init__(self):
+        self.providers = [
+            self.btsn,
+            self.tpb,
+        ]
+
+    def tpb(self, text):
+        results = dict()
+        url = "https://thepiratebay.se/search/{0}/0/7/100,200"
+        soup = self.get_url_soup(url, text)
+
+        root = soup.find(id='searchResult')
+        for item in root.findAll('tr'):
+            the_class = item.get('class')
+            if the_class == 'header':
+                continue
+            mag = str(
+                item.find(
+                    title='Download this torrent using magnet',
+                ).get('href')
+            )
+            mag = mag.split('btih:')[1].split('&')[0]
+
+            if mag in results:
+                continue
+
+            size = item.find('font').text
+            size = size.split('Size ')[1].split(',')[0]
+            [size, units] = size.split('&nbsp;')
+            if units[0] == 'M':
+                size = str(float(size)/1024)
+
+            size = size[0:size.index('.')+2]
+
+            results[mag] = dict(
+                seeders=int(item.find(align='right').text),
+                size=size,
+                name=item.find('a', {'class': 'detLink'}).text,
+                mag=mag,
+            )
+
+        return results
+
+    def btsn(self, text):
+        results = dict()
+        url = "http://bitsnoop.com/search/all/{0}/s/d/1/?fmt=rss"
+        soup = self.get_url_soup(url, text)
+
+        for item in soup.findAll('item'):
+            mag = item.find('infohash').text
+
+            if mag in results:
+                continue
+
+            size = str(float(item.find('size').text)/1024/1024/1024)
+            size = size[0:size.index('.')+2]
+
+            results[mag] = dict(
+                seeders=int(item.find('numseeders').text),
+                size=size,
+                name=item.find('title').text,
+                mag=mag,
+            )
+
+        return results
+
+    def get_url_soup(self, url, text):
+        opener = urllib2.build_opener()
+        opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+        error = False
+
+        try:
+            page = opener.open(url.format(urllib2.quote(text))).read()
+        except:
+            error = True
+
+        if error:
+            self.show_error('Remote address unavailable.')
+
+        soup = BeautifulSoup.BeautifulSoup(page)
+
+        return soup
+
+    def search_all(self, text):
+        found_items = dict()
+
+        for fn in self.providers:
+            found_items = dict(found_items.items() + fn(text).items())
+
+        return found_items
 
 
 class PeerflixPlayer:
@@ -37,15 +129,17 @@ class PeerflixPlayer:
 
         return progress
 
-    def check_if_valid_url(self, clip):
-        if not clip.strip():
-            self.run([
-                'zenity',
-                '--title=Peerflix Player',
-                "--text=Please copy a url and restart this program.",
-                '--error',
-            ])
-            exit()
+    def is_valid_url(self, clip):
+        if clip and clip.strip():
+            return True
+
+    def show_not_valid_url(self):
+        self.run([
+            'zenity',
+            '--title=Peerflix Player',
+            "--text=Please copy a url and restart this program.",
+            '--error',
+        ])
 
     def finish_progress(self, progress):
         progress.writelines(['100'])
@@ -118,7 +212,7 @@ class PeerflixPlayer:
 
         return selected
 
-    def run_movie(self, clip, choices, choice):
+    def play_item(self, clip, choices, choice):
         val = choice
         if val[0] is '|':
             val = val[1:]
@@ -131,32 +225,6 @@ class PeerflixPlayer:
         )
 
         os.system(cmd)
-
-    def play_item(self, clip, choices, choice):
-        args = (clip, choices, choice)
-        thr = threading.Thread(target=self.run_movie, args=args)
-
-        #start file in background thread
-        thr.start()
-
-        #wait for vlc to open
-        time.sleep(5)
-
-        #show loading dialog
-        progress = os.popen2([
-            'zenity',
-            '--title=Peerflix Player',
-            '--progress',
-            '--text=Processing file ...',
-            '--pulsate',
-            '--auto-close',
-        ], 'w')[0]
-        self.activate_progress(progress)
-
-        #wait for file to end
-        thr.join()
-
-        self.finish_progress(progress)
 
     def get_action(self):
         action = self.run(' '.join([
@@ -173,35 +241,27 @@ class PeerflixPlayer:
         if len(action):
             return action[0]
 
-    def do_search(self, text):
-        progress = self.show_downloading_info()
+    def show_error(self, text):
+        self.run([
+            'zenity',
+            '--error',
+            "--text={0}".format(text),
+        ])
 
-        url = "http://bitsnoop.com/search/all/{0}/c/d/1/?fmt=rss"
-        opener = urllib2.build_opener()
-        opener.addheaders = [('User-agent', 'Mozilla/5.0')]
-        page = opener.open(url.format(urllib2.quote(text))).read()
-        rss = BeautifulSoup.BeautifulSoup(page)
+    def show_processing(self):
+        progress = os.popen2([
+            'zenity',
+            '--title=Peerflix Player',
+            '--progress',
+            '--text=Processing file ...',
+            '--pulsate',
+            '--auto-close',
+        ], 'w')[0]
+        self.activate_progress(progress)
 
-        self.finish_progress(progress)
+        return progress
 
-        items = []
-        urls = []
-
-        is_first = 'TRUE'
-        idx = 1
-        for item in rss.findAll('item'):
-            items.append(is_first)
-            is_first = 'FALSE'
-            items.append(str(idx))
-            idx += 1
-            items.append(item.find('numseeders').text)
-            val = str(int(item.find('size').text)/1024.0/1024.0/1024.0)
-            items.append(val[0:val.index('.')+2])
-            items.append(item.find('title').text)
-            val = item.find('magneturi').text
-            items.append(val)
-            urls.append(val)
-
+    def pick_found_items(self, items):
         cmd = [
             'zenity',
             '--list',
@@ -215,15 +275,38 @@ class PeerflixPlayer:
             '--column=Peers',
             '--column=GB',
             '--column=Name',
-            '--column=URL',
         ]
 
-        cmd.extend(items)
+        idx = 1
+        is_first = 'TRUE'
 
-        selected = self.run(cmd)
+        sorted_items = sorted(
+            [(int(value['seeders']), key) for (key, value) in items.items()],
+            reverse=True,
+        )
 
-        selected = urls[int(selected[0]) - 1]
-        return selected
+        for (seeders, mag) in sorted_items:
+            item = items[mag]
+            cmd.extend([
+                is_first,
+                str(idx),
+                str(item['seeders']),
+                item['size'],
+                item['name'],
+            ])
+            is_first = 'FALSE'
+            idx += 1
+
+        selected = self.run(cmd)[0]
+
+        if not selected:
+            return
+
+        base = "magnet:?xt=urn:btih:{0}"
+
+        (seeders, mag) = sorted_items[int(selected) - 1]
+
+        return base.format(mag)
 
     def main(self):
         self.clean_up()
@@ -238,9 +321,16 @@ class PeerflixPlayer:
         elif 'Quit' is action:
             return
         else:
-            clip = self.do_search(action)
+            progress = self.show_downloading_info()
+            searcher = WebSearcher()
+            found_items = searcher.search_all(action)
+            self.finish_progress(progress)
+            clip = self.pick_found_items(found_items)
 
-        self.check_if_valid_url(clip)
+        if not self.is_valid_url(clip):
+            self.show_not_valid_url()
+            return
+
         progress = self.show_downloading_info()
         start_choices = self.get_choices(clip)
         choices = copy.copy(start_choices)
@@ -255,9 +345,10 @@ class PeerflixPlayer:
         if not len(selected):
             return
 
+        progress = self.show_processing()
+
         for choice in selected:
             self.play_item(clip, start_choices, choice)
-
 
 if __name__ == '__main__':
     player = PeerflixPlayer()
