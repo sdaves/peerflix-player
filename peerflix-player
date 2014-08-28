@@ -176,6 +176,7 @@ class PeerflixPlayer:
             '.sfv',
             '.png',
             '.jpg',
+            '.srt',
         ]
 
         for val in bad_strings:
