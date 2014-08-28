@@ -23,7 +23,7 @@ class WebSearcher:
 
         if not soup:
             self.player.show_error("{0} unavailable.".format(
-              url[url.index('//')+2:url.index('.')+3]
+                url[url.index('//')+2:url.index('.')+3]
             ))
             return results
 
@@ -70,7 +70,7 @@ class WebSearcher:
 
         if not soup:
             self.player.show_error("{0} unavailable.".format(
-              url[url.index('//')+2:url.index('.')+4]
+                url[url.index('//')+2:url.index('.')+4]
             ))
             return results
 
@@ -222,7 +222,6 @@ class PeerflixPlayer:
         for item in choices:
             cmd.extend(['FALSE', item])
 
-
         selected = self.run(cmd)
 
         if len(selected):
@@ -244,16 +243,14 @@ class PeerflixPlayer:
 
         os.system(cmd)
 
-    def get_action(self):
+    def get_action(self, text):
         action = self.run(' '.join([
             'zenity',
             '--entry',
             '--title="Peerflix Player"',
             '--text="Sit back, and relax."',
             '--width=300',
-            '--entry-text="Enter Search Term"',
-            "'Play clipboard url'",
-            "'Quit'",
+            "--entry-text=\"{0}\"".format(text),
         ]))
 
         if len(action):
@@ -328,31 +325,36 @@ class PeerflixPlayer:
 
     def main(self):
         self.clean_up()
+        self.loop_get_action()
+
+    def loop_get_action(self, action='Enter Search Term'):
+        action = self.get_action(action)
         clip = ''
-        action = self.get_action()
 
         if not action:
             return
 
-        if 'Play clipboard url' in action:
-            clip = self.get_url()
-        elif 'Quit' is action:
-            return
-        else:
-            progress = self.show_downloading_info()
-            searcher = WebSearcher(self)
-            found_items = searcher.search_all(action)
-            self.finish_progress(progress)
-            if not len(found_items):
-                self.show_error('Sorry, but nothing was found.')
-                return self.main()
+        action = action[0:-1]
+        progress = self.show_downloading_info()
+        searcher = WebSearcher(self)
+        found_items = searcher.search_all(action)
+        self.finish_progress(progress)
+        if not len(found_items):
+            self.show_error('Sorry, but nothing was found.')
+            return self.main()
+
+        self.loop_pick_found_items(found_items, action, clip)
+
+    def loop_pick_found_items(self, found_items, action, clip=None):
+        if not clip:
             clip = self.pick_found_items(found_items)
-            if not clip:
-                return self.main()
+
+        if not clip:
+            return self.loop_get_action(action)
 
         if not self.is_valid_url(clip):
             self.show_not_valid_url()
-            return self.main()
+            return self.loop_get_action(action)
 
         progress = self.show_downloading_info()
         start_choices = self.get_choices(clip)
@@ -360,18 +362,24 @@ class PeerflixPlayer:
         self.finish_progress(progress)
         choices = self.clean_choices(choices)
 
+        self.loop_get_selected(
+            choices, start_choices, found_items, action, clip)
+
+    def loop_get_selected(
+            self, choices, start_choices, found_items, action, clip):
+
         if len(choices) is 1:
             selected = choices
         else:
             selected = self.get_selected(choices)
 
         if not len(selected):
-            return self.main()
-
-        progress = self.show_processing()
+            return self.loop_pick_found_items(found_items, action)
 
         for choice in selected:
             self.play_item(clip, start_choices, choice)
+
+        return self.loop_pick_found_items(found_items, action, clip)
 
 if __name__ == '__main__':
     player = PeerflixPlayer()
