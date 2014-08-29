@@ -98,7 +98,11 @@ class WebSearcher:
         error = False
 
         try:
-            page = opener.open(url.format(urllib2.quote(text))).read()
+            page = opener.open(
+                url.format(urllib2.quote(text)),
+                None,
+                5,
+            ).read()
         except:
             error = True
 
