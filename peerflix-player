@@ -331,14 +331,16 @@ class PeerflixPlayer:
         self.clean_up()
         self.loop_get_action()
 
-    def loop_get_action(self, action='Enter Search Term'):
-        action = self.get_action(action)
+    def loop_get_action(self, action='Enter Search Term', skip_dialog=False):
         clip = ''
+
+        if not skip_dialog:
+            action = self.get_action(action)
+            action = action[0:-1]
 
         if not action:
             return
 
-        action = action[0:-1]
         progress = self.show_downloading_info()
         searcher = WebSearcher(self)
         found_items = searcher.search_all(action)
@@ -383,7 +385,10 @@ class PeerflixPlayer:
         for choice in selected:
             self.play_item(clip, start_choices, choice)
 
-        return self.loop_pick_found_items(found_items, action, clip)
+        if len(choices) is 1:
+            return self.loop_get_action(action=action, skip_dialog=True)
+        else:
+            return self.loop_pick_found_items(found_items, action, clip)
 
 if __name__ == '__main__':
     player = PeerflixPlayer()
